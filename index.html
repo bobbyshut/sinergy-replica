@@ -750,6 +750,7 @@
     .fb-dot.checking     { background: #fb8c00; animation: fb-pulse .8s infinite alternate; }
     @keyframes fb-pulse   { from { opacity: 1; } to { opacity: .3; } }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -1026,6 +1027,10 @@
         <a class="nav-item" id="nav-dashboard-permohonan" onclick="navigate('dashboard-permohonan')">
           <span class="material-icons">table_chart</span>
           <span class="nav-label">Dashboard Permohonan</span>
+        </a>
+        <a class="nav-item" id="nav-dashboard-pemenuhan-kewajiban" onclick="navigate('dashboard-pemenuhan-kewajiban')">
+          <span class="material-icons">fact_check</span>
+          <span class="nav-label">Dashboard Pemenuhan Kewajiban</span>
         </a>
       </div>
     </div>
@@ -3110,6 +3115,20 @@
             Pilih SK PPKH terlebih dahulu untuk menentukan sumber data kewajiban.
           </div>
 
+          <!-- Toggle: pilih sumber data — Laporan 6 Bulanan vs Manual -->
+          <div id="ev-sumber-toggle" style="display:none;margin-bottom:12px;gap:10px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:6px 12px;border:1px solid var(--border);border-radius:20px;">
+              <input type="radio" name="ev-sumber-pilih" value="l6b" onchange="evSumberModeChange('l6b')"
+                style="accent-color:var(--primary);width:15px;height:15px;" />
+              Mengacu Laporan 6 Bulanan (Tervalidasi)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:6px 12px;border:1px solid var(--border);border-radius:20px;">
+              <input type="radio" name="ev-sumber-pilih" value="manual" onchange="evSumberModeChange('manual')"
+                style="accent-color:var(--primary);width:15px;height:15px;" />
+              Input Manual (Pilih Kewajiban Sendiri)
+            </label>
+          </div>
+
           <!-- Opsi A: Pilih Laporan 6 Bulanan tervalidasi -->
           <div id="ev-l6b-section" style="display:none;margin-bottom:8px;">
             <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Laporan 6 Bulanan (Tervalidasi)</div>
@@ -3118,7 +3137,7 @@
 
           <!-- Opsi B: Pilih Kewajiban manual (fallback) -->
           <div id="ev-kwj-section" style="display:none;margin-bottom:8px;">
-            <div style="font-size:13px;color:#e65100;background:#fff8e1;border:1px solid #f9a825;border-radius:4px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px;">
+            <div id="ev-kwj-warning" style="font-size:13px;color:#e65100;background:#fff8e1;border:1px solid #f9a825;border-radius:4px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px;">
               <span class="material-icons" style="font-size:18px;flex-shrink:0;">info</span>
               <span>Belum ada Laporan 6 Bulanan tervalidasi untuk SK ini. Pilih kewajiban yang akan dievaluasi secara manual.</span>
             </div>
@@ -3634,6 +3653,111 @@
         <span class="page-tag">/ppkh/dashboard-permohonan</span>
       </div>
     </div>
+
+    <div class="page" id="page-dashboard-pemenuhan-kewajiban">
+      <div class="page-title">Dashboard Pemenuhan Kewajiban</div>
+
+      <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+
+        <!-- ===== PANEL KIRI: DAFTAR KEWAJIBAN ===== -->
+        <div style="flex:0 0 320px;background:white;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+          <div style="padding:12px 14px;background:var(--primary);color:white;font-size:13px;font-weight:700;">
+            Daftar Kewajiban
+          </div>
+          <div id="dpk-kewajiban-list" style="max-height:600px;overflow-y:auto;"></div>
+        </div>
+
+        <!-- ===== PANEL KANAN: REKAP ===== -->
+        <div style="flex:1;min-width:320px;background:white;border:1px solid var(--border);border-radius:8px;padding:16px;">
+
+          <div id="dpk-empty-state" style="text-align:center;padding:60px 20px;color:var(--text-secondary);">
+            <span class="material-icons" style="font-size:48px;opacity:0.2;display:block;margin-bottom:10px;">fact_check</span>
+            Pilih salah satu jenis kewajiban di sebelah kiri untuk melihat rekap.
+          </div>
+
+          <div id="dpk-rekap-content" style="display:none;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+              <div>
+                <div id="dpk-kewajiban-title" style="font-size:15px;font-weight:700;color:var(--primary);"></div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">Rekap akumulasi realisasi seluruh SK PPKH</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Provinsi:</span>
+                <select id="dpk-filter-provinsi" onchange="dpkRender()"
+                  style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;min-width:180px;">
+                  <option value="">Semua Provinsi</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="dpk-unsupported" style="display:none;text-align:center;padding:40px 20px;color:var(--text-secondary);">
+              <span class="material-icons" style="font-size:40px;opacity:0.2;display:block;margin-bottom:8px;">construction</span>
+              Rekap untuk jenis kewajiban ini akan ditambahkan pada iterasi berikutnya.
+            </div>
+
+            <div id="dpk-tab-container">
+              <!-- ===== TAB HEADERS ===== -->
+              <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:14px;">
+                <button id="dpk-tab-btn-rencana" onclick="dpkSwitchTab('rencana')"
+                  style="padding:10px 18px;font-size:13px;font-weight:700;background:none;border:none;cursor:pointer;
+                         color:var(--text-secondary);border-bottom:3px solid transparent;">
+                  Rencana
+                </button>
+                <button id="dpk-tab-btn-lap6" onclick="dpkSwitchTab('lap6')"
+                  style="padding:10px 18px;font-size:13px;font-weight:700;background:none;border:none;cursor:pointer;
+                         color:var(--primary);border-bottom:3px solid var(--primary);">
+                  Laporan 6 Bulanan
+                </button>
+                <button id="dpk-tab-btn-evaluasi" onclick="dpkSwitchTab('evaluasi')"
+                  style="padding:10px 18px;font-size:13px;font-weight:700;background:none;border:none;cursor:pointer;
+                         color:var(--text-secondary);border-bottom:3px solid transparent;">
+                  Evaluasi
+                </button>
+              </div>
+
+              <!-- ===== TAB: RENCANA ===== -->
+              <div id="dpk-tab-content-rencana" class="dpk-tab-content" style="display:none;">
+                <div id="dpk-status-info-rencana" style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;"></div>
+                <div id="dpk-cards-rencana" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;"></div>
+              </div>
+
+              <!-- ===== TAB: LAPORAN 6 BULANAN ===== -->
+              <div id="dpk-tab-content-lap6" class="dpk-tab-content">
+                <div id="dpk-status-info-lap6" style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;"></div>
+                <div id="dpk-cards-lap6" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;"></div>
+              </div>
+
+              <!-- ===== TAB: EVALUASI ===== -->
+              <div id="dpk-tab-content-evaluasi" class="dpk-tab-content" style="display:none;">
+                <div id="dpk-status-info-evaluasi" style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;"></div>
+                <div id="dpk-cards-evaluasi" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MODAL: RINCIAN SK (Dashboard Pemenuhan Kewajiban) ===== -->
+    <div class="dialog-overlay" id="dpk-rincian-modal">
+      <div class="dialog-box" style="max-width:1100px;width:95%;">
+        <div class="dialog-header">
+          <span class="dh-title" id="dpk-rincian-title">Rincian SK</span>
+          <button onclick="dpkExportRincianExcel()" title="Download Excel" style="margin-right:4px;">
+            <span class="material-icons">file_download</span>
+          </button>
+          <button onclick="dpkCloseRincian()"><span class="material-icons">close</span></button>
+        </div>
+        <div class="dialog-body" style="padding:16px;overflow:auto;max-height:75vh;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead id="dpk-rincian-thead"></thead>
+            <tbody id="dpk-rincian-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
 
     <div class="page" id="page-si-terkait">
       <div class="page-title">Sistem Informasi Terkait</div>
@@ -4225,6 +4349,10 @@
     // Saat ke evaluasi, load data evaluasi (tab Laporan Evaluasi default aktif)
     if (pageId === 'evaluasi') {
       setTimeout(() => { evDataLoaded = false; evLoadData(); }, 0);
+    }
+    // Saat ke dashboard pemenuhan kewajiban, load & render rekap
+    if (pageId === 'dashboard-pemenuhan-kewajiban') {
+      setTimeout(() => dpkInit(), 0);
     }
     if (window.innerWidth <= 1024) closeSidebar();
     document.getElementById('userDropdown').classList.remove('open');
@@ -8144,8 +8272,18 @@
         }));
       }
 
+      // 4b. Data Detail Kewajiban — Lokasi Rehabilitasi DAS (jika kewajiban ini ada di daftar)
+      let rehabDasData = [];
+      if (daftarRec && kwjList.includes(DK_REHAB_DAS_NAME)) {
+        try {
+          const r = await fetch(`${DK_FB_BASE}${DK_FB_NODE}/${daftarRec._fbKey}/rehab_das.json`);
+          const j = await r.json();
+          if (j && typeof j === 'object') rehabDasData = Object.values(j);
+        } catch(e) {}
+      }
+
       // 5. Build HTML print
-      const html = ppBuildPrintHTML(skData, kwjList, rencanaMap, usingSnapshot);
+      const html = ppBuildPrintHTML(skData, kwjList, rencanaMap, usingSnapshot, rehabDasData);
 
       // 5. Buka window baru, tulis HTML, lalu print
       const printWin = window.open('', '_blank', 'width=900,height=700');
@@ -8176,7 +8314,7 @@
   }
 
   /* ── Build HTML untuk print ── */
-  function ppBuildPrintHTML(skData, kwjList, rencanaMap = {}, usingSnapshot = false) {
+  function ppBuildPrintHTML(skData, kwjList, rencanaMap = {}, usingSnapshot = false, rehabDasData = []) {
     const rec     = ppActiveRecord;
     const semLbl  = rec.semester == 1 ? 'Semester 1 (Januari – Juni)' : 'Semester 2 (Juli – Desember)';
     const semAktif = String(rec.semester);
@@ -8411,6 +8549,49 @@
         </tr>`;
       }).join('');
 
+      // Detail Kewajiban (Rehab DAS) — hanya untuk kewajiban Rehab DAS & jika ada data
+      let detailKwjHTML = '';
+      if (kwjName === DK_REHAB_DAS_NAME && rehabDasData.length > 0) {
+        const detailRows = rehabDasData.map((d, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${d.nomor_sk_rehab || '—'}</td>
+            <td>${d.tanggal_sk || '—'}</td>
+            <td class="val-num">${fmtNum(d.luas)}</td>
+            <td>${d.kota || '—'}</td>
+            <td>${d.provinsi || '—'}</td>
+            <td class="val-num">${fmtNum(d.hutan_konservasi)}</td>
+            <td class="val-num">${fmtNum(d.hutan_lindung)}</td>
+            <td class="val-num">${fmtNum(d.hp_terbatas)}</td>
+            <td class="val-num">${fmtNum(d.hp_tetap)}</td>
+            <td class="val-num">${fmtNum(d.hp_konversi)}</td>
+            <td class="val-num">${fmtNum(d.apl)}</td>
+          </tr>`).join('');
+        detailKwjHTML = `
+          <div class="sub-label">A. Detail Kewajiban — Lokasi Rehabilitasi DAS</div>
+          <table class="matriks-table" style="font-size:7.5pt;">
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Nomor SK Rehab DAS</th>
+                <th>Tanggal SK</th>
+                <th>Luas (Ha)</th>
+                <th>Kota/Kab</th>
+                <th>Provinsi</th>
+                <th>Hutan Konservasi</th>
+                <th>Hutan Lindung</th>
+                <th>HP Terbatas</th>
+                <th>HP Tetap</th>
+                <th>HP Konversi</th>
+                <th>APL</th>
+              </tr>
+            </thead>
+            <tbody>${detailRows}</tbody>
+          </table>`;
+      }
+      const labelRencanaRealisasi = detailKwjHTML ? 'B' : 'A';
+      const labelTotalAkum        = detailKwjHTML ? 'C' : 'B';
+
       detailHTML += `
         <div class="page">
           <div class="kwj-header">
@@ -8418,7 +8599,9 @@
             <div class="kwj-header-name">${kwjName}</div>
           </div>
 
-          <div class="sub-label">A. Rencana dan Realisasi Tahun ${rec.tahun}</div>
+          ${detailKwjHTML}
+
+          <div class="sub-label">${labelRencanaRealisasi}. Rencana dan Realisasi Tahun ${rec.tahun}</div>
           <table class="matriks-table">
             <thead>
               <tr>
@@ -8432,7 +8615,7 @@
             <tbody>${sub1Rows}</tbody>
           </table>
 
-          <div class="sub-label">B. Total Rencana dan Akumulasi Realisasi</div>
+          <div class="sub-label">${labelTotalAkum}. Total Rencana dan Akumulasi Realisasi</div>
           <table class="matriks-table">
             <thead>
               <tr>
@@ -9585,8 +9768,24 @@
         hasilEvaluasi = (await res.json()) || {};
       } catch(e) { hasilEvaluasi = rec.hasil_evaluasi || {}; }
 
+      // 5b. Data Detail Kewajiban — Lokasi Rehabilitasi DAS (jika kewajiban ini ada di daftar evaluasi)
+      let rehabDasData = [];
+      const kwjListEv = Array.isArray(rec.kewajiban) ? rec.kewajiban : [];
+      if (kwjListEv.includes(DK_REHAB_DAS_NAME)) {
+        let daftarRecEv = null;
+        if (refLap && refLap.daftar_fb_key) daftarRecEv = l6bDaftarData.find(r => r._fbKey === refLap.daftar_fb_key);
+        if (!daftarRecEv) daftarRecEv = l6bDaftarData.find(r => r.id_ippkh === rec.id_ippkh && r.nomor_sk === rec.nomor_sk);
+        if (daftarRecEv) {
+          try {
+            const r = await fetch(`${DK_FB_BASE}${DK_FB_NODE}/${daftarRecEv._fbKey}/rehab_das.json`);
+            const j = await r.json();
+            if (j && typeof j === 'object') rehabDasData = Object.values(j);
+          } catch(e) {}
+        }
+      }
+
       // 6. Build HTML print
-      const html = evBuildPrintHTML(rec, skData, refLap, refRealisasi, refRencana, hasilEvaluasi);
+      const html = evBuildPrintHTML(rec, skData, refLap, refRealisasi, refRencana, hasilEvaluasi, rehabDasData);
 
       // 7. Buka window baru, tulis HTML, lalu print
       const printWin = window.open('', '_blank', 'width=900,height=700');
@@ -9611,7 +9810,7 @@
   }
 
   /* ── Build HTML untuk print "Laporan Rekapitulasi Data Evaluasi" ── */
-  function evBuildPrintHTML(rec, skData, refLap, refRealisasi, refRencana, hasilEvaluasi) {
+  function evBuildPrintHTML(rec, skData, refLap, refRealisasi, refRencana, hasilEvaluasi, rehabDasData = []) {
     const kwjList = Array.isArray(rec.kewajiban) ? rec.kewajiban : [];
 
     // Identitas dari SK
@@ -9873,6 +10072,49 @@
         </tr>`;
       }).join('');
 
+      // Detail Kewajiban (Rehab DAS) — hanya untuk kewajiban Rehab DAS & jika ada data
+      let detailKwjHTML = '';
+      if (kwjName === DK_REHAB_DAS_NAME && rehabDasData.length > 0) {
+        const detailRows = rehabDasData.map((d, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${d.nomor_sk_rehab || '—'}</td>
+            <td>${d.tanggal_sk || '—'}</td>
+            <td class="val-num">${fmtNum(d.luas)}</td>
+            <td>${d.kota || '—'}</td>
+            <td>${d.provinsi || '—'}</td>
+            <td class="val-num">${fmtNum(d.hutan_konservasi)}</td>
+            <td class="val-num">${fmtNum(d.hutan_lindung)}</td>
+            <td class="val-num">${fmtNum(d.hp_terbatas)}</td>
+            <td class="val-num">${fmtNum(d.hp_tetap)}</td>
+            <td class="val-num">${fmtNum(d.hp_konversi)}</td>
+            <td class="val-num">${fmtNum(d.apl)}</td>
+          </tr>`).join('');
+        detailKwjHTML = `
+          <div class="sub-label">A. Detail Kewajiban — Lokasi Rehabilitasi DAS</div>
+          <table class="matriks-table" style="font-size:7.5pt;">
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Nomor SK Rehab DAS</th>
+                <th>Tanggal SK</th>
+                <th>Luas (Ha)</th>
+                <th>Kota/Kab</th>
+                <th>Provinsi</th>
+                <th>Hutan Konservasi</th>
+                <th>Hutan Lindung</th>
+                <th>HP Terbatas</th>
+                <th>HP Tetap</th>
+                <th>HP Konversi</th>
+                <th>APL</th>
+              </tr>
+            </thead>
+            <tbody>${detailRows}</tbody>
+          </table>`;
+      }
+      const labelRencanaRealisasi = detailKwjHTML ? 'B' : 'A';
+      const labelTotalAkumEval    = detailKwjHTML ? 'C' : 'B';
+
       detailHTML += `
         <div class="page">
           <div class="kwj-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -9885,7 +10127,9 @@
 
           ${hasilKwj.ket_kwj ? `<div style="font-size:8.5pt;color:#555;margin-bottom:8px;"><strong>Keterangan Evaluasi:</strong> ${hasilKwj.ket_kwj}</div>` : ''}
 
-          <div class="sub-label">A. Rencana dan Realisasi Tahun ${rec.tahun || '—'}</div>
+          ${detailKwjHTML}
+
+          <div class="sub-label">${labelRencanaRealisasi}. Rencana dan Realisasi Tahun ${rec.tahun || '—'}</div>
           <table class="matriks-table">
             <thead>
               <tr>
@@ -9899,7 +10143,7 @@
             <tbody>${subARows}</tbody>
           </table>
 
-          <div class="sub-label">B. Total Rencana, Akumulasi Realisasi dan Hasil Evaluasi</div>
+          <div class="sub-label">${labelTotalAkumEval}. Total Rencana, Akumulasi Realisasi dan Hasil Evaluasi</div>
           <table class="matriks-table">
             <thead>
               <tr>
@@ -10071,10 +10315,13 @@
     // Reset sumber data section
     const hint = document.getElementById('ev-sumber-hint');
     if (hint) { hint.style.display = ''; hint.textContent = 'Pilih SK PPKH terlebih dahulu untuk menentukan sumber data kewajiban.'; }
+    const toggleWrap = document.getElementById('ev-sumber-toggle');
+    if (toggleWrap) toggleWrap.style.display = 'none';
     const l6bSection = document.getElementById('ev-l6b-section');
     if (l6bSection) l6bSection.style.display = 'none';
     const kwjSection = document.getElementById('ev-kwj-section');
     if (kwjSection) kwjSection.style.display = 'none';
+    evEvLaporanTervalidasi = [];
 
     populateEvSkOptions();
     buildEvKwjList();
@@ -10132,6 +10379,11 @@
 
     // ── Selaraskan Bagian 2 dengan data tersimpan ──
     if (rec.sumber === 'l6b' && rec.l6b_ref) {
+      // Pastikan toggle terset ke 'l6b'
+      const radioL6b = document.querySelector('input[name="ev-sumber-pilih"][value="l6b"]');
+      if (radioL6b) radioL6b.checked = true;
+      evSumberModeChange('l6b');
+
       // Jika laporan 6 bulanan yang dipilih sebelumnya masih ada dalam daftar tervalidasi, pilih itu
       const radio = document.querySelector(`input[name="ev-l6b-pilih"][value="${rec.l6b_ref}"]`);
       if (radio) {
@@ -10148,15 +10400,12 @@
       // Jika tidak ditemukan (laporan referensi sudah tidak tervalidasi/terhapus), tetap pakai default
       // hasil onEvSkChange (laporan terbaru) — evSumberMode tetap 'l6b'.
     } else if (rec.sumber === 'manual') {
-      // Pre-check kewajiban yang sudah tersimpan sebelumnya
-      evSumberMode = 'manual';
-      const hint       = document.getElementById('ev-sumber-hint');
-      const l6bSection = document.getElementById('ev-l6b-section');
-      const kwjSection = document.getElementById('ev-kwj-section');
-      if (hint) hint.style.display = 'none';
-      if (l6bSection) l6bSection.style.display = 'none';
-      if (kwjSection) kwjSection.style.display = '';
+      // Set toggle ke 'manual' (jika toggle tampil — ada laporan tervalidasi tapi user pilih manual)
+      const radioManual = document.querySelector('input[name="ev-sumber-pilih"][value="manual"]');
+      if (radioManual) radioManual.checked = true;
+      evSumberModeChange('manual');
 
+      // Pre-check kewajiban yang sudah tersimpan sebelumnya
       (rec.kewajiban || []).forEach(kwjName => {
         const idx = KEWAJIBAN_MASTER.indexOf(kwjName);
         if (idx >= 0) {
@@ -10228,13 +10477,16 @@
     evSelectedKwj    = new Set();
     evSumberMode     = null;
 
-    const hint       = document.getElementById('ev-sumber-hint');
-    const l6bSection = document.getElementById('ev-l6b-section');
-    const kwjSection = document.getElementById('ev-kwj-section');
-    const l6bList    = document.getElementById('ev-l6b-list');
+    const hint        = document.getElementById('ev-sumber-hint');
+    const toggleWrap  = document.getElementById('ev-sumber-toggle');
+    const l6bSection  = document.getElementById('ev-l6b-section');
+    const kwjSection  = document.getElementById('ev-kwj-section');
+    const kwjWarning  = document.getElementById('ev-kwj-warning');
+    const l6bList     = document.getElementById('ev-l6b-list');
 
     if (!nomorSk) {
       if (hint) { hint.style.display = ''; hint.textContent = 'Pilih SK PPKH terlebih dahulu untuk menentukan sumber data kewajiban.'; }
+      if (toggleWrap) toggleWrap.style.display = 'none';
       if (l6bSection) l6bSection.style.display = 'none';
       if (kwjSection) kwjSection.style.display = 'none';
       return;
@@ -10250,40 +10502,77 @@
       return (parseInt(b.semester)||0) - (parseInt(a.semester)||0);
     });
 
+    evEvLaporanTervalidasi = laporanTervalidasi; // simpan untuk dipakai saat toggle berganti
+
+    if (hint) hint.style.display = 'none';
+
     if (laporanTervalidasi.length > 0) {
-      // ===== Sumber: Laporan 6 Bulanan =====
-      evSumberMode = 'l6b';
-      if (hint) hint.style.display = 'none';
-      if (kwjSection) kwjSection.style.display = 'none';
-      if (l6bSection) l6bSection.style.display = '';
+      // ===== Tersedia Laporan 6 Bulanan — tampilkan toggle, default ke l6b =====
+      if (toggleWrap) toggleWrap.style.display = 'flex';
+      const radioL6b    = document.querySelector('input[name="ev-sumber-pilih"][value="l6b"]');
+      const radioManual = document.querySelector('input[name="ev-sumber-pilih"][value="manual"]');
+      if (radioL6b)    radioL6b.checked = true;
+      if (radioManual) radioManual.checked = false;
+      if (kwjWarning) kwjWarning.style.display = 'none';
 
-      evSelectedL6bKey = laporanTervalidasi[0]._fbKey; // default: terbaru
-
-      if (l6bList) {
-        l6bList.innerHTML = laporanTervalidasi.map((d, i) => {
-          const semLabel = d.semester == 1 ? 'Jan – Jun' : 'Jul – Des';
-          const jumlahKwj = Array.isArray(d.kewajiban) ? d.kewajiban.length : 0;
-          const isLatest = i === 0;
-          return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid ${isLatest ? 'var(--primary)' : 'var(--border)'};border-radius:6px;cursor:pointer;background:${isLatest ? '#e8f5e9' : 'white'};">
-            <input type="radio" name="ev-l6b-pilih" value="${d._fbKey}" ${isLatest ? 'checked' : ''} onchange="evL6bPick('${d._fbKey}')"
-              style="accent-color:var(--primary);width:16px;height:16px;margin-top:2px;" />
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;">Tahun ${d.tahun} — Semester ${d.semester} <span style="font-weight:400;color:var(--text-secondary);">(${semLabel})</span>
-                ${isLatest ? `<span style="margin-left:6px;font-size:10px;font-weight:700;color:var(--primary);background:white;border:1px solid var(--primary);padding:1px 6px;border-radius:10px;">Terbaru</span>` : ''}
-              </div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${jumlahKwj} kewajiban · Status: Tervalidasi</div>
-            </div>
-          </label>`;
-        }).join('');
-      }
+      evL6bRenderList(laporanTervalidasi);
+      evSumberModeChange('l6b');
     } else {
-      // ===== Fallback: tidak ada laporan 6 bulanan tervalidasi → pilih kewajiban manual =====
-      evSumberMode = 'manual';
-      if (hint) hint.style.display = 'none';
-      if (l6bSection) l6bSection.style.display = 'none';
-      if (kwjSection) kwjSection.style.display = '';
+      // ===== Tidak ada laporan 6 bulanan tervalidasi → sembunyikan toggle, langsung manual =====
+      if (toggleWrap) toggleWrap.style.display = 'none';
+      if (kwjWarning) kwjWarning.style.display = '';
+      if (l6bList) l6bList.innerHTML = '';
+      evSumberModeChange('manual');
     }
   }
+
+  // Cache laporan tervalidasi hasil onEvSkChange terakhir
+  let evEvLaporanTervalidasi = [];
+
+  /* ── Render daftar pilihan Laporan 6 Bulanan tervalidasi ── */
+  function evL6bRenderList(laporanTervalidasi) {
+    const l6bList = document.getElementById('ev-l6b-list');
+    if (!l6bList) return;
+    evSelectedL6bKey = laporanTervalidasi[0]?._fbKey || null; // default: terbaru
+
+    l6bList.innerHTML = laporanTervalidasi.map((d, i) => {
+      const semLabel = d.semester == 1 ? 'Jan – Jun' : 'Jul – Des';
+      const jumlahKwj = Array.isArray(d.kewajiban) ? d.kewajiban.length : 0;
+      const isLatest = i === 0;
+      return `<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid ${isLatest ? 'var(--primary)' : 'var(--border)'};border-radius:6px;cursor:pointer;background:${isLatest ? '#e8f5e9' : 'white'};">
+        <input type="radio" name="ev-l6b-pilih" value="${d._fbKey}" ${isLatest ? 'checked' : ''} onchange="evL6bPick('${d._fbKey}')"
+          style="accent-color:var(--primary);width:16px;height:16px;margin-top:2px;" />
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;">Tahun ${d.tahun} — Semester ${d.semester} <span style="font-weight:400;color:var(--text-secondary);">(${semLabel})</span>
+            ${isLatest ? `<span style="margin-left:6px;font-size:10px;font-weight:700;color:var(--primary);background:white;border:1px solid var(--primary);padding:1px 6px;border-radius:10px;">Terbaru</span>` : ''}
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${jumlahKwj} kewajiban · Status: Tervalidasi</div>
+        </div>
+      </label>`;
+    }).join('');
+  }
+
+  /* ── Toggle sumber data: 'l6b' | 'manual' ── */
+  function evSumberModeChange(mode) {
+    evSumberMode = mode;
+    const l6bSection = document.getElementById('ev-l6b-section');
+    const kwjSection = document.getElementById('ev-kwj-section');
+    const kwjWarning = document.getElementById('ev-kwj-warning');
+
+    if (mode === 'l6b') {
+      if (l6bSection) l6bSection.style.display = '';
+      if (kwjSection) kwjSection.style.display = 'none';
+      if (evEvLaporanTervalidasi.length > 0 && !evSelectedL6bKey) {
+        evSelectedL6bKey = evEvLaporanTervalidasi[0]._fbKey;
+      }
+    } else {
+      if (l6bSection) l6bSection.style.display = 'none';
+      if (kwjSection) kwjSection.style.display = '';
+      // Tampilkan banner peringatan hanya jika memang tidak ada laporan tervalidasi
+      if (kwjWarning) kwjWarning.style.display = evEvLaporanTervalidasi.length > 0 ? 'none' : '';
+    }
+  }
+
 
   function evL6bPick(fbKey) {
     evSelectedL6bKey = fbKey;
@@ -11989,7 +12278,438 @@
   });
 
 
-  navigate('beranda');
+  /* ============================================================
+     DASHBOARD PEMENUHAN KEWAJIBAN
+     Sumber data:
+       - /laporan_6bulanan/pelaporan  (PP_FB_BASE/PP_FB_NODE) -> ppPelaporanData
+       - /evaluasi/laporan            (EV_FB_BASE/EV_FB_NODE) -> evData
+       - /sk_ppkh                      -> mapping id_ippkh -> provinsi
+     ============================================================ */
+
+  let dpkLoaded      = false;
+  let dpkSkMap       = {};   // id_ippkh -> { provinsi, nomor_sk, nama_lembaga, tanggal_terbit, luas_ha }
+  let dpkActiveKwjIdx = null;
+  let dpkLatestPP    = [];
+  let dpkLatestEV    = [];
+  let dpkKwjKeyG     = '';
+  let dpkKwjNameG    = '';
+  let dpkProvLabelG  = '';
+
+  // Komponen yang didukung untuk rekap (per nama kewajiban master)
+  const DPK_SUPPORTED = {
+    'Membayar PNBP Penggunaan Kawasan Hutan': ['Kewajiban PNBP PKH', 'Pembayaran PNBP PKH', 'Piutang PNBP PKH'],
+    'Membuat rencana dan melaksanakan reklamasi dan revegetasi pada Kawasan Hutan yang sudah tidak dipergunakan': [
+      'Bukaan kegiatan PPKH (Ha)',
+      'Sarana Prasarana penunjang (Ha)',
+      'Bekas Bukaan kegiatan PPKH (Ha)',
+      'Bekas Sarana Prasarana penunjang (Ha)',
+      'Luas Vegetasi (Ha)',
+      'Luas Tanaman yang dinilai (Ha)',
+      'Luas Tanaman yang dinyatakan berhasil (Ha)'
+    ]
+  };
+
+  // Kolom tambahan (selain kolom umum identitas SK) untuk modal rincian SK, per kewajiban & per tab.
+  // Format: { 'Nama Kewajiban': { lap6: [{label, get(d, sk)}], evaluasi: [{label, get(d, sk)}] } }
+  const DPK_RINCIAN_KOLOM = {
+    'Membayar PNBP Penggunaan Kawasan Hutan': {
+      rencana: [
+        { label: 'Kewajiban PNBP PKH',  get: (d, sk, kwjKey) => fmtRpKolom(d.snapshot_rencana?.[kwjKey]?.total?.['Kewajiban PNBP PKH']?.nilai) },
+        { label: 'Pembayaran PNBP PKH', get: (d, sk, kwjKey) => fmtRpKolom(d.snapshot_rencana?.[kwjKey]?.total?.['Pembayaran PNBP PKH']?.nilai) },
+        { label: 'Piutang PNBP PKH',    get: (d, sk, kwjKey) => fmtRpKolom(d.snapshot_rencana?.[kwjKey]?.total?.['Piutang PNBP PKH']?.nilai) }
+      ],
+      lap6: [
+        { label: 'Kewajiban PNBP PKH',  get: (d, sk, kwjKey) => fmtRpKolom(d.realisasi?.[kwjKey]?.akumulasi?.['Kewajiban PNBP PKH']?.nilai) },
+        { label: 'Pembayaran PNBP PKH', get: (d, sk, kwjKey) => fmtRpKolom(d.realisasi?.[kwjKey]?.akumulasi?.['Pembayaran PNBP PKH']?.nilai) },
+        { label: 'Piutang PNBP PKH',    get: (d, sk, kwjKey) => fmtRpKolom(d.realisasi?.[kwjKey]?.akumulasi?.['Piutang PNBP PKH']?.nilai) }
+      ],
+      evaluasi: [
+        { label: 'Kewajiban PNBP PKH',  get: (d, sk, kwjKey) => fmtRpKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.['Kewajiban PNBP PKH']?.nilai) },
+        { label: 'Pembayaran PNBP PKH', get: (d, sk, kwjKey) => fmtRpKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.['Pembayaran PNBP PKH']?.nilai) },
+        { label: 'Piutang PNBP PKH',    get: (d, sk, kwjKey) => fmtRpKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.['Piutang PNBP PKH']?.nilai) }
+      ]
+    },
+    'Membuat rencana dan melaksanakan reklamasi dan revegetasi pada Kawasan Hutan yang sudah tidak dipergunakan': {
+      rencana:  DPK_SUPPORTED['Membuat rencana dan melaksanakan reklamasi dan revegetasi pada Kawasan Hutan yang sudah tidak dipergunakan']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.snapshot_rencana?.[kwjKey]?.total?.[k]?.nilai) })),
+      lap6:     DPK_SUPPORTED['Membuat rencana dan melaksanakan reklamasi dan revegetasi pada Kawasan Hutan yang sudah tidak dipergunakan']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
+      evaluasi: DPK_SUPPORTED['Membuat rencana dan melaksanakan reklamasi dan revegetasi pada Kawasan Hutan yang sudah tidak dipergunakan']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
+    }
+  };
+
+  function fmtNumKolom(v) {
+    if (v === undefined || v === null || v === '') return '—';
+    return Number(v).toLocaleString('id-ID');
+  }
+
+  function fmtRpKolom(v) {
+    if (v === undefined || v === null || v === '') return '—';
+    return 'Rp ' + Number(v).toLocaleString('id-ID');
+  }
+
+  async function dpkInit() {
+    // Render daftar kewajiban (selalu, tidak perlu fetch ulang)
+    dpkRenderKewajibanList();
+
+    if (dpkLoaded) { dpkRender(); return; }
+
+    // Pastikan data pelaporan & evaluasi tersedia
+    if (!ppDataLoaded) await ppLoadData();
+    if (!evDataLoaded) await evLoadData();
+
+    // Load SK PPKH untuk mapping provinsi
+    try {
+      const res  = await fetch(`${PP_FB_BASE}/sk_ppkh.json`);
+      const json = await res.json();
+      dpkSkMap = {};
+      if (json && typeof json === 'object') {
+        Object.values(json).forEach(sk => {
+          const ippkh = sk.id_ippkh || sk.ippkh || '';
+          if (ippkh) dpkSkMap[ippkh] = {
+            provinsi:       sk.provinsi       || '',
+            nomor_sk:       sk.nomor_sk        || sk.nomor || '',
+            nama_lembaga:   sk.nama_lembaga    || '',
+            tanggal_terbit: sk.tanggal_terbit  || sk.tanggal || '',
+            luas_ha:        sk.luas_ha != null ? sk.luas_ha : (sk.luas || '')
+          };
+        });
+      }
+    } catch(e) {
+      console.warn('Gagal memuat sk_ppkh untuk dashboard pemenuhan kewajiban:', e);
+    }
+
+    dpkPopulateProvinsiFilter();
+    dpkLoaded = true;
+    dpkRender();
+  }
+
+  /* ── Render daftar kewajiban di panel kiri ── */
+  function dpkRenderKewajibanList() {
+    const el = document.getElementById('dpk-kewajiban-list');
+    if (!el) return;
+    el.innerHTML = KEWAJIBAN_MASTER.map((kwj, idx) => {
+      const supported = !!DPK_SUPPORTED[kwj];
+      const active = dpkActiveKwjIdx === idx;
+      return `<div onclick="dpkSelectKewajiban(${idx})"
+        style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);
+               background:${active ? '#e8f5e9' : 'white'};
+               color:${active ? 'var(--primary)' : 'var(--text-primary)'};
+               font-weight:${active ? '700' : '400'};
+               display:flex;align-items:center;gap:8px;">
+        <span class="material-icons" style="font-size:16px;flex-shrink:0;opacity:${supported ? '1' : '0.35'};">
+          ${supported ? 'bar_chart' : 'remove_circle_outline'}
+        </span>
+        <span>${kwj}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function dpkSelectKewajiban(idx) {
+    dpkActiveKwjIdx = idx;
+    dpkRenderKewajibanList();
+    document.getElementById('dpk-empty-state').style.display = 'none';
+    document.getElementById('dpk-rekap-content').style.display = 'block';
+    dpkRender();
+  }
+
+  /* ── Populate dropdown filter provinsi (distinct, dari seluruh sk_ppkh) ── */
+  function dpkPopulateProvinsiFilter() {
+    const sel = document.getElementById('dpk-filter-provinsi');
+    if (!sel) return;
+    const provinsiSet = new Set();
+    Object.values(dpkSkMap).forEach(sk => { if (sk.provinsi) provinsiSet.add(sk.provinsi); });
+    const provinsiList = Array.from(provinsiSet).sort((a,b) => a.localeCompare(b));
+    sel.innerHTML = '<option value="">Semua Provinsi</option>' +
+      provinsiList.map(p => `<option value="${p}">${p}</option>`).join('');
+  }
+
+  /* ── Ambil record terakhir per SK berdasarkan tahun & semester (Lap 6 Bulanan, tervalidasi) ── */
+  function dpkGetLatestPelaporan() {
+    const byKey = {}; // id_ippkh|nomor_sk -> record terbaik
+    ppPelaporanData.forEach(d => {
+      if ((d.status || '') !== 'tervalidasi') return;
+      const key = `${d.id_ippkh || ''}|${d.nomor_sk || ''}`;
+      const score = (parseInt(d.tahun) || 0) * 10 + (parseInt(d.semester) || 0);
+      if (!byKey[key] || score > byKey[key]._score) {
+        byKey[key] = { ...d, _score: score };
+      }
+    });
+    return Object.values(byKey);
+  }
+
+  /* ── Ambil record terakhir per SK berdasarkan tahun (Evaluasi, terkunci) ── */
+  function dpkGetLatestEvaluasi() {
+    const byKey = {};
+    evData.forEach(d => {
+      if (!d.terkunci) return;
+      const key = `${d.id_ippkh || ''}|${d.nomor_sk || ''}`;
+      const score = (parseInt(d.tahun) || 0) * 10 + (parseInt(d.semester) || 0);
+      if (!byKey[key] || score > byKey[key]._score) {
+        byKey[key] = { ...d, _score: score };
+      }
+    });
+    return Object.values(byKey);
+  }
+
+  /* ── Render rekap untuk kewajiban terpilih ── */
+  let dpkActiveTab = 'lap6'; // 'lap6' | 'evaluasi'
+
+  function dpkSwitchTab(tab) {
+    dpkActiveTab = tab;
+    const tabs = { rencana: 'dpk-tab-content-rencana', lap6: 'dpk-tab-content-lap6', evaluasi: 'dpk-tab-content-evaluasi' };
+    Object.entries(tabs).forEach(([t, id]) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (t === tab) ? 'block' : 'none';
+    });
+    const btns = {
+      rencana:  document.getElementById('dpk-tab-btn-rencana'),
+      lap6:     document.getElementById('dpk-tab-btn-lap6'),
+      evaluasi: document.getElementById('dpk-tab-btn-evaluasi')
+    };
+    Object.entries(btns).forEach(([t, btn]) => {
+      if (!btn) return;
+      btn.style.color = tab === t ? 'var(--primary)' : 'var(--text-secondary)';
+      btn.style.borderBottom = tab === t ? '3px solid var(--primary)' : '3px solid transparent';
+    });
+  }
+
+  function dpkRender() {
+    if (dpkActiveKwjIdx === null) return;
+    const kwjName  = KEWAJIBAN_MASTER[dpkActiveKwjIdx];
+    const kwjKey   = `kwj_${dpkActiveKwjIdx}`;
+    const titleEl  = document.getElementById('dpk-kewajiban-title');
+    if (titleEl) titleEl.textContent = kwjName;
+
+    const unsupportedEl = document.getElementById('dpk-unsupported');
+    const tabContainerEl = document.getElementById('dpk-tab-container');
+    const cardsRencanaEl = document.getElementById('dpk-cards-rencana');
+    const cardsLap6El    = document.getElementById('dpk-cards-lap6');
+    const cardsEvalEl    = document.getElementById('dpk-cards-evaluasi');
+    const statusRencanaEl = document.getElementById('dpk-status-info-rencana');
+    const statusLap6El   = document.getElementById('dpk-status-info-lap6');
+    const statusEvalEl   = document.getElementById('dpk-status-info-evaluasi');
+
+    const komponenList = DPK_SUPPORTED[kwjName];
+    if (!komponenList) {
+      tabContainerEl.style.display = 'none';
+      unsupportedEl.style.display = 'block';
+      return;
+    }
+    tabContainerEl.style.display = 'block';
+    unsupportedEl.style.display = 'none';
+    dpkSwitchTab(dpkActiveTab);
+
+    const filterProvinsi = document.getElementById('dpk-filter-provinsi')?.value || '';
+
+    // Helper: cek apakah record termasuk filter provinsi
+    const matchProvinsi = (d) => {
+      if (!filterProvinsi) return true;
+      const sk = dpkSkMap[d.id_ippkh] || {};
+      return (sk.provinsi || '') === filterProvinsi;
+    };
+
+    // Kumpulkan record relevan: yang punya kewajiban ini DAN ada data realisasi/evaluasi untuk kwjKey
+    const latestPP = dpkGetLatestPelaporan().filter(matchProvinsi);
+    const latestEV = dpkGetLatestEvaluasi().filter(matchProvinsi);
+
+    // Hitung total per komponen
+    const totals = {}; // komponen -> { rencana: number, lap6: number, eval: number }
+    komponenList.forEach(k => totals[k] = { rencana: 0, lap6: 0, eval: 0 });
+
+    let countRencana = 0;
+    latestPP.forEach(d => {
+      const rec = d.snapshot_rencana?.[kwjKey]?.total;
+      if (!rec) return;
+      let hasAny = false;
+      komponenList.forEach(k => {
+        const nilai = parseFloat(rec[k]?.nilai);
+        if (!isNaN(nilai)) { totals[k].rencana += nilai; hasAny = true; }
+      });
+      if (hasAny) countRencana++;
+    });
+
+    let countLap6 = 0;
+    latestPP.forEach(d => {
+      const rec = d.realisasi?.[kwjKey]?.akumulasi;
+      if (!rec) return;
+      let hasAny = false;
+      komponenList.forEach(k => {
+        const nilai = parseFloat(rec[k]?.nilai);
+        if (!isNaN(nilai)) { totals[k].lap6 += nilai; hasAny = true; }
+      });
+      if (hasAny) countLap6++;
+    });
+
+    let countEval = 0;
+    latestEV.forEach(d => {
+      const rec = d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi;
+      if (!rec) return;
+      let hasAny = false;
+      komponenList.forEach(k => {
+        const nilai = parseFloat(rec[k]?.nilai);
+        if (!isNaN(nilai)) { totals[k].eval += nilai; hasAny = true; }
+      });
+      if (hasAny) countEval++;
+    });
+
+    const provLabel = filterProvinsi || 'Semua Provinsi';
+    dpkLatestPP   = latestPP;
+    dpkLatestEV   = latestEV;
+    dpkKwjKeyG    = kwjKey;
+    dpkKwjNameG   = kwjName;
+    dpkProvLabelG = provLabel;
+    const fmt = (k, v) => {
+      const isRp = /\(Rp\)|Rp\b/i.test(k) || k.toLowerCase().includes('pnbp') || k.toLowerCase().includes('psdh') || k.toLowerCase().includes('dr');
+      return isRp ? ('Rp ' + Number(v).toLocaleString('id-ID')) : Number(v).toLocaleString('id-ID');
+    };
+
+    // ===== TAB: RENCANA =====
+    statusRencanaEl.innerHTML = `
+      <span onclick="dpkOpenRincian('rencana')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="Klik untuk lihat rincian SK">
+        <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#6d4c41;">map</span>
+        ${countRencana} SK — Laporan 6 Bulanan (tervalidasi) · ${provLabel}</span>
+    `;
+    cardsRencanaEl.innerHTML = komponenList.map(k => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:#fafafa;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px;">${k}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#efebe9;border-radius:6px;">
+          <span style="font-size:12px;color:#6d4c41;font-weight:600;">Total Rencana (Masa SK)</span>
+          <span style="font-size:14px;font-weight:700;color:#6d4c41;">${fmt(k, totals[k].rencana)}</span>
+        </div>
+      </div>
+    `).join('');
+
+    // ===== TAB: LAPORAN 6 BULANAN =====
+    statusLap6El.innerHTML = `
+      <span onclick="dpkOpenRincian('lap6')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="Klik untuk lihat rincian SK">
+        <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#2e7d32;">verified</span>
+        ${countLap6} SK — Laporan 6 Bulanan (tervalidasi) · ${provLabel}</span>
+    `;
+    cardsLap6El.innerHTML = komponenList.map(k => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:#fafafa;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px;">${k}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fff8e1;border-radius:6px;">
+          <span style="font-size:12px;color:#f57f17;font-weight:600;">Akumulasi Realisasi</span>
+          <span style="font-size:14px;font-weight:700;color:#f57f17;">${fmt(k, totals[k].lap6)}</span>
+        </div>
+      </div>
+    `).join('');
+
+    // ===== TAB: EVALUASI =====
+    statusEvalEl.innerHTML = `
+      <span onclick="dpkOpenRincian('evaluasi')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="Klik untuk lihat rincian SK">
+        <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#1565c0;">lock</span>
+        ${countEval} SK — Evaluasi (terkunci) · ${provLabel}</span>
+    `;
+    cardsEvalEl.innerHTML = komponenList.map(k => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:#fafafa;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px;">${k}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#e3f2fd;border-radius:6px;">
+          <span style="font-size:12px;color:#1565c0;font-weight:600;">Hasil Evaluasi</span>
+          <span style="font-size:14px;font-weight:700;color:#1565c0;">${fmt(k, totals[k].eval)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /* ── Modal Rincian SK (dipanggil dari klik "X SK — ...") ── */
+  function dpkOpenRincian(tab) {
+    const isEval = tab === 'evaluasi';
+    const isRencana = tab === 'rencana';
+    const list   = isEval ? dpkLatestEV : dpkLatestPP;
+    const extraKolom = (DPK_RINCIAN_KOLOM[dpkKwjNameG] || {})[tab] || [];
+    const sumberData = isEval ? 'Hasil Evaluasi' : 'Laporan 6 Bulanan';
+
+    // Kolom umum
+    const kolomUmum = ['ID PPKH', 'Nama Lembaga', 'Nomor SK', 'Tanggal SK', 'Luas SK (Ha)', 'Sumber Data'];
+    // Kolom khusus tab
+    const kolomTab = isEval
+      ? ['Tahun Evaluasi', 'Nomor SPT', 'Anggaran Evaluasi']
+      : ['Semester', 'Tahun'];
+
+    const headerCols = [...kolomUmum, ...kolomTab, ...extraKolom.map(c => c.label)];
+
+    const rows = list.map(d => {
+      const sk = dpkSkMap[d.id_ippkh] || {};
+      const tglSk = sk.tanggal_terbit || '—';
+      const luasSk = (sk.luas_ha !== '' && sk.luas_ha != null) ? Number(sk.luas_ha).toLocaleString('id-ID') : '—';
+
+      const colsUmum = [
+        d.id_ippkh || '—',
+        sk.nama_lembaga || '—',
+        d.nomor_sk || sk.nomor_sk || '—',
+        tglSk,
+        luasSk,
+        sumberData
+      ];
+
+      const colsTab = isEval
+        ? [ d.tahun || '—', d.nomor_spt || '—', d.anggaran != null ? ('Rp ' + Number(d.anggaran).toLocaleString('id-ID')) : '—' ]
+        : [ d.semester || '—', d.tahun || '—' ];
+
+      const colsExtra = extraKolom.map(c => c.get(d, sk, dpkKwjKeyG));
+
+      return [...colsUmum, ...colsTab, ...colsExtra];
+    });
+
+    const titleEl = document.getElementById('dpk-rincian-title');
+    const titleSuffix = isRencana ? 'Rencana (Snapshot Laporan 6 Bulanan)' : sumberData;
+    if (titleEl) titleEl.textContent = `Rincian SK — ${dpkKwjNameG} (${titleSuffix}) · ${dpkProvLabelG}`;
+
+    // Simpan untuk ekspor Excel
+    dpkRincianExportData = { title: `Rincian SK - ${dpkKwjNameG} (${titleSuffix}) - ${dpkProvLabelG}`, headerCols, rows };
+
+    const theadEl = document.getElementById('dpk-rincian-thead');
+    if (theadEl) {
+      theadEl.innerHTML = '<tr>' + headerCols.map(h =>
+        `<th style="padding:8px 10px;border-bottom:2px solid var(--border);text-align:left;white-space:nowrap;font-size:12px;">${h}</th>`
+      ).join('') + '</tr>';
+    }
+
+    const tbodyEl = document.getElementById('dpk-rincian-tbody');
+    if (tbodyEl) {
+      if (rows.length === 0) {
+        tbodyEl.innerHTML = `<tr><td colspan="${headerCols.length}" style="padding:20px;text-align:center;color:var(--text-secondary);">Tidak ada data.</td></tr>`;
+      } else {
+        tbodyEl.innerHTML = rows.map(r => '<tr>' + r.map(c =>
+          `<td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;white-space:nowrap;">${c}</td>`
+        ).join('') + '</tr>').join('');
+      }
+    }
+
+    document.getElementById('dpk-rincian-modal').classList.add('open');
+  }
+
+  function dpkCloseRincian() {
+    document.getElementById('dpk-rincian-modal').classList.remove('open');
+  }
+
+  let dpkRincianExportData = null;
+
+  function dpkExportRincianExcel() {
+    if (!dpkRincianExportData || typeof XLSX === 'undefined') {
+      showToast('⚠️ Data rincian belum tersedia atau library Excel gagal dimuat');
+      return;
+    }
+    const { title, headerCols, rows } = dpkRincianExportData;
+    if (!rows.length) {
+      showToast('⚠️ Tidak ada data untuk diunduh');
+      return;
+    }
+    // Bersihkan nilai dari tag HTML (jika ada) sebelum ekspor
+    const stripHtml = (v) => String(v).replace(/<[^>]*>/g, '');
+    const aoa = [headerCols, ...rows.map(r => r.map(stripHtml))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Rincian SK');
+    const filename = title.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').substring(0, 100) + '.xlsx';
+    XLSX.writeFile(wb, filename);
+  }
+
+
+
   // Sembunyikan baris 'Batal' by default di tab permohonan
   toggleBatalFilter();
   // Apply role dari localStorage saat pertama kali load (skipProfileNav=true)
