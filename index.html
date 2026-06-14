@@ -3682,11 +3682,10 @@
                 <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">Rekap akumulasi realisasi seluruh SK PPKH</div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Provinsi:</span>
-                <select id="dpk-filter-provinsi" onchange="dpkRender()"
-                  style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;min-width:180px;">
-                  <option value="">Semua Provinsi</option>
-                </select>
+                <button onclick="dpkOpenRekapProvinsi()"
+                  style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--primary);border-radius:4px;font-size:12px;font-weight:700;color:var(--primary);background:white;cursor:pointer;">
+                  <span class="material-icons" style="font-size:16px;">map</span> Rekapitulasi per Provinsi
+                </button>
               </div>
             </div>
 
@@ -3753,6 +3752,25 @@
           <table style="width:100%;border-collapse:collapse;">
             <thead id="dpk-rincian-thead"></thead>
             <tbody id="dpk-rincian-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MODAL: REKAPITULASI PER PROVINSI (Dashboard Pemenuhan Kewajiban) ===== -->
+    <div class="dialog-overlay" id="dpk-rekap-prov-modal">
+      <div class="dialog-box" style="max-width:1100px;width:95%;">
+        <div class="dialog-header">
+          <span class="dh-title" id="dpk-rekap-prov-title">Rekapitulasi per Provinsi</span>
+          <button onclick="dpkExportRekapProvinsiExcel()" title="Download Excel" style="margin-right:4px;">
+            <span class="material-icons">file_download</span>
+          </button>
+          <button onclick="dpkCloseRekapProvinsi()"><span class="material-icons">close</span></button>
+        </div>
+        <div class="dialog-body" style="padding:16px;overflow:auto;max-height:75vh;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead id="dpk-rekap-prov-thead"></thead>
+            <tbody id="dpk-rekap-prov-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -7595,7 +7613,7 @@
           <td style="padding:12px 14px;white-space:nowrap;">
             <div style="font-size:13px;font-weight:700;">${d.tahun || '—'}</div>
             <div style="font-size:12px;color:var(--text-secondary);">Semester ${d.semester} &nbsp;·&nbsp; ${d.semester == 1 ? 'Jan – Jun' : 'Jul – Des'}</div>
-            <span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:700;color:${sm.color};background:${sm.bg};padding:2px 8px;border-radius:10px;">${sm.label}</span>
+            <span style="display:inline-block;margin-top:4px;font-size:10px;font-weight:700;color:${sm.color};background:${sm.bg};padding:2px 8px;border-radius:10px;">${sm.label}</span>${(statusVal === 'tervalidasi' && upLengkap) ? ` <span style="font-size:10px;font-weight:700;color:#1565c0;">✓ Laporan Selesai</span>` : ''}
             ${tombolAksiExtra}
             ${ikonCatatan}
             ${uploadDokBlock}
@@ -8694,7 +8712,9 @@
     const lapTerkunci = lapStatus === 'proses_validasi' || lapStatus === 'siap_validasi' || lapStatus === 'tervalidasi';
     // Saat perbaikan: hanya kewajiban 'perlu_perbaikan' yang bisa diedit; sisanya terkunci
     const kwjTerkunci = lapStatus === 'proses_perbaikan' && kwjStatus !== 'perlu_perbaikan';
-    const isViewMode = ppViewMode === 'view' || lapTerkunci || kwjTerkunci || kwjStatus === 'sesuai' || activeRole === 'superadmin';
+    // Kewajiban sudah dilaporkan (siap_validasi) → read-only sampai user klik "Edit Laporan"
+    const kwjSudahDilaporkan = kwjStatus === 'siap_validasi';
+    const isViewMode = ppViewMode === 'view' || lapTerkunci || kwjTerkunci || kwjStatus === 'sesuai' || kwjSudahDilaporkan || activeRole === 'superadmin';
 
     // Tampilkan catatan admin jika ada
     const catatanAdmin = ppRealisasiData?.[kwjKey]?.catatan_admin || '';
@@ -9028,6 +9048,7 @@
     if (lapTerkunci)  { showToast('⚠️ Laporan sedang dalam proses validasi.'); return; }
     if (kwjTerkunci)  { showToast('⚠️ Hanya kewajiban oranye yang bisa diedit saat ini.'); return; }
     if (kwjStatus === 'sesuai') { showToast('⚠️ Kewajiban ini sudah disetujui Admin.'); return; }
+    if (kwjStatus === 'siap_validasi') { showToast('⚠️ Kewajiban ini sudah dilaporkan. Klik "Edit Laporan" untuk mengubah data.'); return; }
     if (activeRole === 'superadmin') return;
 
     // Ambil nilai saat ini
@@ -9543,8 +9564,15 @@
              </div>`
           : `<span style="font-size:11px;color:var(--text-secondary);font-style:italic;">—</span>`;
 
+        const refLapL6b = (d.sumber === 'l6b' && d.l6b_ref)
+          ? ppPelaporanData.find(r => r._fbKey === d.l6b_ref)
+          : null;
+        const refLapInfo = refLapL6b
+          ? ` · Tahun ${refLapL6b.tahun} Semester ${refLapL6b.semester}`
+          : '';
+
         const sumberLabel = d.sumber === 'l6b'
-          ? `<span style="font-size:10px;font-weight:700;color:#f57f17;background:#fff8e1;padding:2px 8px;border-radius:10px;">Dari Laporan 6 Bulanan</span>`
+          ? `<span style="font-size:10px;font-weight:700;color:#f57f17;background:#fff8e1;padding:2px 8px;border-radius:10px;">Dari Laporan 6 Bulanan${refLapInfo}</span>`
           : `<span style="font-size:10px;font-weight:700;color:#616161;background:#f5f5f5;padding:2px 8px;border-radius:10px;">Manual</span>`;
 
         const tglSpt = d.tanggal_spt ? new Date(d.tanggal_spt).toLocaleDateString('id-ID', {day:'2-digit',month:'short',year:'numeric'}) : '—';
@@ -12306,6 +12334,83 @@
       'Luas Vegetasi (Ha)',
       'Luas Tanaman yang dinilai (Ha)',
       'Luas Tanaman yang dinyatakan berhasil (Ha)'
+    ],
+    'Membayar PSDH, dan/atau DR': [
+      'Kewajiban PSDH (Rp) LHC',
+      'Pembayaran PSDH (Rp) LHC',
+      'Piutang PSDH (Rp) LHC',
+      'Kewajiban DR LHC',
+      'Pembayaran DR LHC',
+      'Piutang DR LHC',
+      'Kewajiban PSDH (Rp) LHP',
+      'Pembayaran PSDH (Rp) LHP',
+      'Piutang PSDH (Rp) LHP',
+      'Kewajiban DR LHP',
+      'Pembayaran DR LHP',
+      'Piutang DR LHP'
+    ],
+    'Melakukan penanaman dalam rangka rehabilitasi Daerah Aliran Sungai (DAS)': [
+      'Penanaman (Ha)',
+      'Pemeliharaan 1 (Ha)',
+      'Pemeliharaan 2 dan seterusnya (Ha)',
+      'Penilaian tanaman (Ha)',
+      'Serah Terima Tanaman (Ha)'
+    ],
+    'Membayar ganti rugi nilai tegakan kepada pemerintah apabila areal PPKH merupakan hutan tanaman hasil rehabilitasi': [
+      'Luas areal penanaman yang tumpang tindih dengan PPKH (Ha)',
+      'Nilai Biaya Ganti Rugi (Rp)'
+    ],
+    'Mengganti biaya investasi Pengelolaan Hutan/ Pemanfaatan Hutan kepada pengelola/pemegang PBPH': [
+      'Jumlah Pengelola atau Pemegang PBPH',
+      'Nilai Biaya Penggantian Investasi (Rp)'
+    ],
+    'Melakukan penanaman tanaman kayu di bagian tepi di kiri kanan atau sekeliling areal PPKH': [
+      'Luas Areal Penanaman (Ha)',
+      'Jumlah Batang Penanaman (Batang)'
+    ],
+    'Melaksanakan inventarisasi tegakan sesuai dengan rencana kerja PKH tahunan': [
+      'Luas Areal yang di Inventarisasi (Ha)',
+      'Volume Kelas Meranti (m3)',
+      'Volume Kelas Rimba Campuran (m3)',
+      'Volume Kelas Kayu Indah (m3)',
+      'Volume Kelas Kayu Lainnya (m3)'
+    ],
+    'Pemeliharaan Batas Areal PPKH': [
+      'Panjang Batas yang Dipelihara (Km)',
+      'Jumlah Pal Batas yang Dipelihara',
+      'Anggaran Pemeliharaan Batas (Rp)'
+    ],
+    'Melakukan pemberdayaan masyarakat sekitar areal PPKH': [
+      'Jumlah Kegiatan Pemberdayaan Masyarakat',
+      'Anggaran Pemberdayaan Masyarakat (Rp)'
+    ],
+    'Melaksanakan Perlindungan Hutan Atas Areal PPKH': [
+      'Jumlah Kegiatan Perlindungan Hutan',
+      'Anggaran Kegiatan Perlindungan Hutan (Rp)'
+    ],
+    'Melaksanakan pencegahan dan perlindungan terhadap kebakaran hutan dan lahan': [
+      'Jumlah Kegiatan Pencegahan Kebakaran Hutan dan Lahan',
+      'Anggaran Kegiatan Pencegahan Kebakaran Hutan dan Lahan (Rp)'
+    ],
+    'Memberikan kemudahan bagi aparat LHK pada kegiatan monitoring dan evaluasi di lapangan': [
+      'Jumlah Kegiatan Monitoring dan Evaluasi',
+      'Anggaran Kegiatan Monitoring dan Evaluasi (Rp)'
+    ],
+    'Mengamankan Kawasan Hutan dalam hal areal PPKH berbatasan dengan Hutan Konservasi dan Hutan Lindung': [
+      'Jumlah Kegiatan Pengamanan Kawasan Hutan',
+      'Anggaran Kegiatan Pengamanan Kawasan Hutan (Rp)'
+    ],
+    'Mengkoordinasikan kegiatan kepada instansi LHK setempat, pemegang izin Pemanfaatan Hutan, Pengelolaan Hutan': [
+      'Jumlah Kegiatan Koordinasi',
+      'Anggaran Kegiatan Koordinasi (Rp)'
+    ],
+    'Melaksanakan kewajiban lain yang ditetapkan oleh Menteri': [
+      'Jumlah Kegiatan',
+      'Jumlah Anggaran (Rp)'
+    ],
+    'Melaksanakan perlindungan satwa liar dan/atau satwa yang dilindungi sesuai SOP': [
+      'Jumlah Kegiatan',
+      'Jumlah Anggaran (Rp)'
     ]
   };
 
@@ -12336,8 +12441,58 @@
         .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
       evaluasi: DPK_SUPPORTED['Membuat rencana dan melaksanakan reklamasi dan revegetasi pada Kawasan Hutan yang sudah tidak dipergunakan']
         .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
+    },
+    'Membayar PSDH, dan/atau DR': {
+      rencana:  DPK_SUPPORTED['Membayar PSDH, dan/atau DR']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtRpKolom(d.snapshot_rencana?.[kwjKey]?.total?.[k]?.nilai) })),
+      lap6:     DPK_SUPPORTED['Membayar PSDH, dan/atau DR']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtRpKolom(d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
+      evaluasi: DPK_SUPPORTED['Membayar PSDH, dan/atau DR']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtRpKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
+    },
+    'Melakukan penanaman dalam rangka rehabilitasi Daerah Aliran Sungai (DAS)': {
+      rencana:  DPK_SUPPORTED['Melakukan penanaman dalam rangka rehabilitasi Daerah Aliran Sungai (DAS)']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.snapshot_rencana?.[kwjKey]?.total?.[k]?.nilai) })),
+      lap6:     DPK_SUPPORTED['Melakukan penanaman dalam rangka rehabilitasi Daerah Aliran Sungai (DAS)']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
+      evaluasi: DPK_SUPPORTED['Melakukan penanaman dalam rangka rehabilitasi Daerah Aliran Sungai (DAS)']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtNumKolom(d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
+    },
+    'Membayar ganti rugi nilai tegakan kepada pemerintah apabila areal PPKH merupakan hutan tanaman hasil rehabilitasi': {
+      rencana:  DPK_SUPPORTED['Membayar ganti rugi nilai tegakan kepada pemerintah apabila areal PPKH merupakan hutan tanaman hasil rehabilitasi']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.snapshot_rencana?.[kwjKey]?.total?.[k]?.nilai) })),
+      lap6:     DPK_SUPPORTED['Membayar ganti rugi nilai tegakan kepada pemerintah apabila areal PPKH merupakan hutan tanaman hasil rehabilitasi']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
+      evaluasi: DPK_SUPPORTED['Membayar ganti rugi nilai tegakan kepada pemerintah apabila areal PPKH merupakan hutan tanaman hasil rehabilitasi']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
+    },
+    'Mengganti biaya investasi Pengelolaan Hutan/ Pemanfaatan Hutan kepada pengelola/pemegang PBPH': {
+      rencana:  DPK_SUPPORTED['Mengganti biaya investasi Pengelolaan Hutan/ Pemanfaatan Hutan kepada pengelola/pemegang PBPH']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.snapshot_rencana?.[kwjKey]?.total?.[k]?.nilai) })),
+      lap6:     DPK_SUPPORTED['Mengganti biaya investasi Pengelolaan Hutan/ Pemanfaatan Hutan kepada pengelola/pemegang PBPH']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
+      evaluasi: DPK_SUPPORTED['Mengganti biaya investasi Pengelolaan Hutan/ Pemanfaatan Hutan kepada pengelola/pemegang PBPH']
+        .map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
     }
   };
+
+  // Auto-deteksi format Rp vs angka biasa berdasarkan nama label kolom
+  function fmtAutoKolom(label, v) {
+    const isRp = /\(Rp\)|Rp\b/i.test(label);
+    return isRp ? fmtRpKolom(v) : fmtNumKolom(v);
+  }
+
+  // Auto-generate DPK_RINCIAN_KOLOM untuk kewajiban DPK_SUPPORTED yang belum punya definisi kolom eksplisit.
+  // Menggunakan fmtAutoKolom (auto-deteksi Rp vs angka berdasarkan label komponen).
+  Object.keys(DPK_SUPPORTED).forEach(kwjName => {
+    if (DPK_RINCIAN_KOLOM[kwjName]) return; // sudah ada definisi eksplisit, lewati
+    const komponenList = DPK_SUPPORTED[kwjName];
+    DPK_RINCIAN_KOLOM[kwjName] = {
+      rencana:  komponenList.map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.snapshot_rencana?.[kwjKey]?.total?.[k]?.nilai) })),
+      lap6:     komponenList.map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.realisasi?.[kwjKey]?.akumulasi?.[k]?.nilai) })),
+      evaluasi: komponenList.map(k => ({ label: k, get: (d, sk, kwjKey) => fmtAutoKolom(k, d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi?.[k]?.nilai) }))
+    };
+  });
 
   function fmtNumKolom(v) {
     if (v === undefined || v === null || v === '') return '—';
@@ -12380,7 +12535,7 @@
       console.warn('Gagal memuat sk_ppkh untuk dashboard pemenuhan kewajiban:', e);
     }
 
-    dpkPopulateProvinsiFilter();
+    dpkGetProvinsiList(); // memastikan dpkSkMap siap (no-op selain caching, dipertahankan untuk konsistensi)
     dpkLoaded = true;
     dpkRender();
   }
@@ -12414,15 +12569,11 @@
     dpkRender();
   }
 
-  /* ── Populate dropdown filter provinsi (distinct, dari seluruh sk_ppkh) ── */
-  function dpkPopulateProvinsiFilter() {
-    const sel = document.getElementById('dpk-filter-provinsi');
-    if (!sel) return;
+  /* ── Daftar provinsi distinct (dari seluruh sk_ppkh), terurut ── */
+  function dpkGetProvinsiList() {
     const provinsiSet = new Set();
     Object.values(dpkSkMap).forEach(sk => { if (sk.provinsi) provinsiSet.add(sk.provinsi); });
-    const provinsiList = Array.from(provinsiSet).sort((a,b) => a.localeCompare(b));
-    sel.innerHTML = '<option value="">Semua Provinsi</option>' +
-      provinsiList.map(p => `<option value="${p}">${p}</option>`).join('');
+    return Array.from(provinsiSet).sort((a,b) => a.localeCompare(b));
   }
 
   /* ── Ambil record terakhir per SK berdasarkan tahun & semester (Lap 6 Bulanan, tervalidasi) ── */
@@ -12475,6 +12626,24 @@
     });
   }
 
+  /* ── Helper: render kartu komponen dengan header grup (mengikuti RK_KOMPONEN_GRUP) ── */
+  function dpkRenderCardsWithGroups(kwjName, komponenList, cardBuilder) {
+    const grupKonfig = (RK_KOMPONEN_GRUP || {})[kwjName] || [];
+    const grupMap = {};
+    grupKonfig.forEach(g => (g.komponen || []).forEach(item => { grupMap[item] = g.label; }));
+
+    let lastGrup = null;
+    let html = '';
+    komponenList.forEach(k => {
+      if (grupMap[k] && grupMap[k] !== lastGrup) {
+        lastGrup = grupMap[k];
+        html += `<div style="grid-column:1/-1;background:#37474f;color:white;padding:8px 14px;border-radius:6px;font-size:12px;font-weight:700;">${grupMap[k]}</div>`;
+      }
+      html += cardBuilder(k);
+    });
+    return html;
+  }
+
   function dpkRender() {
     if (dpkActiveKwjIdx === null) return;
     const kwjName  = KEWAJIBAN_MASTER[dpkActiveKwjIdx];
@@ -12501,18 +12670,9 @@
     unsupportedEl.style.display = 'none';
     dpkSwitchTab(dpkActiveTab);
 
-    const filterProvinsi = document.getElementById('dpk-filter-provinsi')?.value || '';
-
-    // Helper: cek apakah record termasuk filter provinsi
-    const matchProvinsi = (d) => {
-      if (!filterProvinsi) return true;
-      const sk = dpkSkMap[d.id_ippkh] || {};
-      return (sk.provinsi || '') === filterProvinsi;
-    };
-
     // Kumpulkan record relevan: yang punya kewajiban ini DAN ada data realisasi/evaluasi untuk kwjKey
-    const latestPP = dpkGetLatestPelaporan().filter(matchProvinsi);
-    const latestEV = dpkGetLatestEvaluasi().filter(matchProvinsi);
+    const latestPP = dpkGetLatestPelaporan();
+    const latestEV = dpkGetLatestEvaluasi();
 
     // Hitung total per komponen
     const totals = {}; // komponen -> { rencana: number, lap6: number, eval: number }
@@ -12554,7 +12714,7 @@
       if (hasAny) countEval++;
     });
 
-    const provLabel = filterProvinsi || 'Semua Provinsi';
+    const provLabel = 'Semua Provinsi';
     dpkLatestPP   = latestPP;
     dpkLatestEV   = latestEV;
     dpkKwjKeyG    = kwjKey;
@@ -12571,7 +12731,7 @@
         <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#6d4c41;">map</span>
         ${countRencana} SK — Laporan 6 Bulanan (tervalidasi) · ${provLabel}</span>
     `;
-    cardsRencanaEl.innerHTML = komponenList.map(k => `
+    cardsRencanaEl.innerHTML = dpkRenderCardsWithGroups(kwjName, komponenList, k => `
       <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:#fafafa;">
         <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px;">${k}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#efebe9;border-radius:6px;">
@@ -12579,7 +12739,7 @@
           <span style="font-size:14px;font-weight:700;color:#6d4c41;">${fmt(k, totals[k].rencana)}</span>
         </div>
       </div>
-    `).join('');
+    `);
 
     // ===== TAB: LAPORAN 6 BULANAN =====
     statusLap6El.innerHTML = `
@@ -12587,7 +12747,7 @@
         <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#2e7d32;">verified</span>
         ${countLap6} SK — Laporan 6 Bulanan (tervalidasi) · ${provLabel}</span>
     `;
-    cardsLap6El.innerHTML = komponenList.map(k => `
+    cardsLap6El.innerHTML = dpkRenderCardsWithGroups(kwjName, komponenList, k => `
       <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:#fafafa;">
         <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px;">${k}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fff8e1;border-radius:6px;">
@@ -12595,7 +12755,7 @@
           <span style="font-size:14px;font-weight:700;color:#f57f17;">${fmt(k, totals[k].lap6)}</span>
         </div>
       </div>
-    `).join('');
+    `);
 
     // ===== TAB: EVALUASI =====
     statusEvalEl.innerHTML = `
@@ -12603,7 +12763,7 @@
         <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#1565c0;">lock</span>
         ${countEval} SK — Evaluasi (terkunci) · ${provLabel}</span>
     `;
-    cardsEvalEl.innerHTML = komponenList.map(k => `
+    cardsEvalEl.innerHTML = dpkRenderCardsWithGroups(kwjName, komponenList, k => `
       <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:#fafafa;">
         <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px;">${k}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#e3f2fd;border-radius:6px;">
@@ -12611,7 +12771,7 @@
           <span style="font-size:14px;font-weight:700;color:#1565c0;">${fmt(k, totals[k].eval)}</span>
         </div>
       </div>
-    `).join('');
+    `);
   }
 
   /* ── Modal Rincian SK (dipanggil dari klik "X SK — ...") ── */
@@ -12623,10 +12783,10 @@
     const sumberData = isEval ? 'Hasil Evaluasi' : 'Laporan 6 Bulanan';
 
     // Kolom umum
-    const kolomUmum = ['ID PPKH', 'Nama Lembaga', 'Nomor SK', 'Tanggal SK', 'Luas SK (Ha)', 'Sumber Data'];
+    const kolomUmum = ['ID PPKH', 'Nama Lembaga', 'Nomor SK', 'Tanggal SK', 'Luas SK (Ha)', 'Provinsi', 'Sumber Data'];
     // Kolom khusus tab
     const kolomTab = isEval
-      ? ['Tahun Evaluasi', 'Nomor SPT', 'Anggaran Evaluasi']
+      ? ['Tahun Evaluasi', 'Nomor SPT', 'Anggaran Evaluasi', 'Status Evaluasi']
       : ['Semester', 'Tahun'];
 
     const headerCols = [...kolomUmum, ...kolomTab, ...extraKolom.map(c => c.label)];
@@ -12642,11 +12802,30 @@
         d.nomor_sk || sk.nomor_sk || '—',
         tglSk,
         luasSk,
+        sk.provinsi || '—',
         sumberData
       ];
 
       const colsTab = isEval
-        ? [ d.tahun || '—', d.nomor_spt || '—', d.anggaran != null ? ('Rp ' + Number(d.anggaran).toLocaleString('id-ID')) : '—' ]
+        ? (() => {
+            const statusEval = d.hasil_evaluasi?.[dpkKwjKeyG]?.status || '';
+            const statusLabel = statusEval === 'terpenuhi'
+              ? '✓ Terpenuhi'
+              : statusEval === 'tidak_terpenuhi'
+                ? '✗ Tidak Terpenuhi'
+                : '— Belum Dievaluasi';
+            const statusStyle = statusEval === 'tidak_terpenuhi'
+              ? 'color:#c62828;font-weight:700;'
+              : statusEval === 'terpenuhi'
+                ? 'color:#2e7d32;font-weight:700;'
+                : 'color:#9e9e9e;';
+            return [
+              d.tahun || '—',
+              d.nomor_spt || '—',
+              d.anggaran != null ? ('Rp ' + Number(d.anggaran).toLocaleString('id-ID')) : '—',
+              `<span style="${statusStyle}">${statusLabel}</span>`
+            ];
+          })()
         : [ d.semester || '—', d.tahun || '—' ];
 
       const colsExtra = extraKolom.map(c => c.get(d, sk, dpkKwjKeyG));
@@ -12687,6 +12866,130 @@
   }
 
   let dpkRincianExportData = null;
+
+  /* ── Modal Rekapitulasi per Provinsi (tombol pengganti filter provinsi) ── */
+  let dpkRekapProvExportData = null;
+
+  function dpkOpenRekapProvinsi() {
+    if (dpkActiveKwjIdx === null) return;
+    const kwjName = dpkKwjNameG;
+    const kwjKey  = dpkKwjKeyG;
+    const komponenList = DPK_SUPPORTED[kwjName];
+    if (!komponenList) { showToast('⚠️ Rekap belum tersedia untuk kewajiban ini'); return; }
+
+    const tab = dpkActiveTab; // 'rencana' | 'lap6' | 'evaluasi'
+    const isEval = tab === 'evaluasi';
+    const list = isEval ? dpkLatestEV : dpkLatestPP; // 'rencana' & 'lap6' keduanya dari latestPP
+
+    const tabLabel = tab === 'rencana' ? 'Rencana' : tab === 'lap6' ? 'Laporan 6 Bulanan' : 'Evaluasi';
+
+    const fmt = (k, v) => {
+      const isRp = /\(Rp\)|Rp\b/i.test(k) || k.toLowerCase().includes('pnbp') || k.toLowerCase().includes('psdh') || k.toLowerCase().includes('dr');
+      return isRp ? ('Rp ' + Number(v).toLocaleString('id-ID')) : Number(v).toLocaleString('id-ID');
+    };
+
+    // Helper ambil nilai komponen dari record sesuai tab aktif
+    const getNilai = (d, komp) => {
+      let rec;
+      if (tab === 'rencana')   rec = d.snapshot_rencana?.[kwjKey]?.total;
+      else if (tab === 'lap6') rec = d.realisasi?.[kwjKey]?.akumulasi;
+      else                     rec = d.hasil_evaluasi?.[kwjKey]?.realisasi_evaluasi;
+      const nilai = parseFloat(rec?.[komp]?.nilai);
+      return isNaN(nilai) ? null : nilai;
+    };
+
+    // Group per provinsi
+    const provMap = {}; // provinsi -> { jumlahSk: number, totals: {komp: number} }
+    list.forEach(d => {
+      const sk = dpkSkMap[d.id_ippkh] || {};
+      const provinsi = sk.provinsi || 'Tidak Diketahui';
+
+      let hasAny = false;
+      const nilaiPerKomp = {};
+      komponenList.forEach(k => {
+        const n = getNilai(d, k);
+        if (n !== null) { nilaiPerKomp[k] = n; hasAny = true; }
+      });
+      if (!hasAny) return;
+
+      if (!provMap[provinsi]) {
+        provMap[provinsi] = { jumlahSk: 0, totals: {} };
+        komponenList.forEach(k => provMap[provinsi].totals[k] = 0);
+      }
+      provMap[provinsi].jumlahSk++;
+      komponenList.forEach(k => {
+        provMap[provinsi].totals[k] += (nilaiPerKomp[k] || 0);
+      });
+    });
+
+    const provinsiNames = Object.keys(provMap).sort((a,b) => a.localeCompare(b));
+
+    const headerCols = ['Provinsi', 'Jumlah SK', ...komponenList];
+    const rows = provinsiNames.map(prov => {
+      const p = provMap[prov];
+      return [prov, String(p.jumlahSk), ...komponenList.map(k => fmt(k, p.totals[k]))];
+    });
+
+    // Baris total
+    if (rows.length > 0) {
+      const totalSk = provinsiNames.reduce((s, prov) => s + provMap[prov].jumlahSk, 0);
+      const totalRow = ['<strong>Total</strong>', `<strong>${totalSk}</strong>`, ...komponenList.map(k => {
+        const sum = provinsiNames.reduce((s, prov) => s + provMap[prov].totals[k], 0);
+        return `<strong>${fmt(k, sum)}</strong>`;
+      })];
+      rows.push(totalRow);
+    }
+
+    const title = `Rekapitulasi per Provinsi — ${kwjName} (${tabLabel})`;
+    const titleEl = document.getElementById('dpk-rekap-prov-title');
+    if (titleEl) titleEl.textContent = title;
+
+    dpkRekapProvExportData = { title: `Rekap Provinsi - ${kwjName} - ${tabLabel}`, headerCols, rows };
+
+    const theadEl = document.getElementById('dpk-rekap-prov-thead');
+    if (theadEl) {
+      theadEl.innerHTML = '<tr>' + headerCols.map(h =>
+        `<th style="padding:8px 10px;border-bottom:2px solid var(--border);text-align:left;white-space:nowrap;font-size:12px;">${h}</th>`
+      ).join('') + '</tr>';
+    }
+
+    const tbodyEl = document.getElementById('dpk-rekap-prov-tbody');
+    if (tbodyEl) {
+      if (rows.length === 0) {
+        tbodyEl.innerHTML = `<tr><td colspan="${headerCols.length}" style="padding:20px;text-align:center;color:var(--text-secondary);">Tidak ada data.</td></tr>`;
+      } else {
+        tbodyEl.innerHTML = rows.map(r => '<tr>' + r.map(c =>
+          `<td style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;white-space:nowrap;">${c}</td>`
+        ).join('') + '</tr>').join('');
+      }
+    }
+
+    document.getElementById('dpk-rekap-prov-modal').classList.add('open');
+  }
+
+  function dpkCloseRekapProvinsi() {
+    document.getElementById('dpk-rekap-prov-modal').classList.remove('open');
+  }
+
+  function dpkExportRekapProvinsiExcel() {
+    if (!dpkRekapProvExportData || typeof XLSX === 'undefined') {
+      showToast('⚠️ Data rekap belum tersedia atau library Excel gagal dimuat');
+      return;
+    }
+    const { title, headerCols, rows } = dpkRekapProvExportData;
+    if (!rows.length) {
+      showToast('⚠️ Tidak ada data untuk diunduh');
+      return;
+    }
+    const stripHtml = (v) => String(v).replace(/<[^>]*>/g, '');
+    const aoa = [headerCols, ...rows.map(r => r.map(stripHtml))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Rekap Provinsi');
+    const filename = title.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').substring(0, 100) + '.xlsx';
+    XLSX.writeFile(wb, filename);
+  }
+
 
   function dpkExportRincianExcel() {
     if (!dpkRincianExportData || typeof XLSX === 'undefined') {
